@@ -50,8 +50,9 @@ except Exception:
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # THE FIX: Using the absolute most stable model alias and removing safety blocks
+# We use 'gemini-1.5-flash-latest' to ensure it's compatible with the v1beta API
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash", 
+    model_name="gemini-1.5-flash-latest", 
     system_instruction=(
         "You are a Professional Intake Assistant for Duffley Law PLLC. "
         "MANDATORY: You are an AI, not an attorney. You cannot give legal advice. "
