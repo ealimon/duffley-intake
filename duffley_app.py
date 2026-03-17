@@ -145,4 +145,18 @@ if prompt := st.chat_input("How can we help you?"):
                     
                     # The reliable 'Read then Update' method
                     existing_data = conn.read(worksheet="Sheet1")
-                    updated_data = pd.concat([existing_data, new_row], ignore_index=
+                    updated_data = pd.concat([existing_data, new_row], ignore_index=True)
+                    conn.update(worksheet="Sheet1", data=updated_data)
+                    
+                    st.session_state.lead_captured = True
+                    # A more formal success toast
+                    st.toast("✅ Your intake details have been secured for attorney review.")
+                    
+                except Exception as sheet_err:
+                    # In a law firm setting, we might log this internally rather than showing a dramatic red box.
+                    # For debugging: st.error(f"Google Sheet Sync Error: {sheet_err}")
+                    print(f"ERROR: Duffley Sheet sync failed: {sheet_err}") # Still logs to Streamlit backend
+
+    except Exception as e:
+        # Generic AI error
+        st.error("Service momentarily unavailable. Please try your message again.")
