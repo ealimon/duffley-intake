@@ -67,7 +67,7 @@ except Exception as e:
 # Configure API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# Safety Settings to prevent "Refusal" errors
+# Safety Settings
 safety_settings = {
     "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
     "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
@@ -75,8 +75,9 @@ safety_settings = {
     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
 }
 
+# FIX: Added 'models/' prefix and '-latest' suffix for v1beta compatibility
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="models/gemini-1.5-flash-latest",
     system_instruction=(
         "You are a Professional Intake Assistant for Duffley Law PLLC. "
         "IMPORTANT: You are an AI assistant, NOT an attorney. You cannot give legal advice. "
@@ -119,7 +120,7 @@ if prompt := st.chat_input("How can we help?"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Sync Logic (Trigger on contact info)
+        # Sync Logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
             extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
@@ -142,7 +143,6 @@ if prompt := st.chat_input("How can we help?"):
                 except:
                     pass
     except Exception as e:
-        # RED BOX DEBUG: Tells us exactly why it failed
         st.error(f"DEBUG ERROR: {e}")
 
 # 6. Legal Footer
