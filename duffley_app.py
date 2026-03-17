@@ -4,14 +4,13 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. UI Branding - Duffley Law PLLC Corporate Identity
+# 1. UI Branding
 st.set_page_config(
     page_title="Duffley Law PLLC | Client Portal",
     page_icon="⚖️",
     layout="centered"
 )
 
-# Custom CSS for the "Duffley Blue" Aesthetic
 st.markdown("""
     <style>
         #MainMenu, footer, header {visibility: hidden;}
@@ -33,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Professional Header
+# 2. Header
 st.markdown("""
     <div class="header-box">
         <h1 style="color: #1A365D; letter-spacing: 2px; margin-bottom: 0px;">DUFFLEY LAW PLLC</h1>
@@ -41,19 +40,16 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 3. Connection & API Config
+# 3. Connection
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
 except Exception:
     st.error("Sheet Connection Error.")
     st.stop()
 
-# 4. API & Model Setup
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# THE FIX: Using 'gemini-1.5-flash' WITHOUT the 'models/' prefix
-# Some versions of the v1beta library automatically add the prefix, 
-# leading to a 404 if we add it manually.
+# THE FIX: This specific name is the "Global Stable" version for v1beta
 model = genai.GenerativeModel(
     model_name="gemini-1.5-flash", 
     system_instruction=(
@@ -69,26 +65,24 @@ model = genai.GenerativeModel(
     }
 )
 
-# 5. State Management
+# 4. State
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.chat_session = model.start_chat(history=[])
     st.session_state.lead_captured = False
 
-# Display History with Scale Avatar
 for m in st.session_state.messages:
     avatar_icon = "⚖️" if m["role"] == "assistant" else "👤"
     with st.chat_message(m["role"], avatar=avatar_icon):
         st.markdown(m["content"])
 
-# Initial Welcome
 if not st.session_state.messages:
     welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you protect your family's legacy today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
-# 6. Chat & Sync
+# 5. Interaction
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
@@ -101,7 +95,7 @@ if prompt := st.chat_input("How can we help?"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Logic to save to Google Sheet
+        # Data Extraction
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
             extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
@@ -121,9 +115,8 @@ if prompt := st.chat_input("How can we help?"):
                 st.session_state.lead_captured = True
                 st.toast("✅ Lead secured.")
     except Exception as e:
-        # This will now show the SPECIFIC error if it fails again
-        st.error(f"System busy. Details: {e}")
+        st.error(f"System busy. Error: {e}")
 
-# 7. Legal Footer
+# 6. Footer
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. This AI does not provide legal advice.</p>", unsafe_allow_html=True)
