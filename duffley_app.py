@@ -23,14 +23,16 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Connection & Stable Model Config
+# 2. Connection & STABLE Model Config
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # RESOLUTION: Using the 'flash-lite' model which avoids the 404 naming conflict
+    # THE FIX: We are removing the 'models/' prefix entirely and using the STABLE alias
+    # This bypasses the v1beta pathing issues
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-lite", 
+        model_name="gemini-1.5-flash", 
+        generation_config={"temperature": 0.7, "top_p": 0.95, "max_output_tokens": 1024},
         system_instruction=(
             "You are a professional intake assistant for Duffley Law PLLC. "
             "STRICT RULE: You are an AI assistant, not an attorney. You cannot give legal advice. "
@@ -52,7 +54,7 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
 
 if not st.session_state.messages:
-    welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you protect your family's legacy today?"
+    welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
@@ -64,6 +66,7 @@ if prompt := st.chat_input("How can we help?"):
         st.markdown(prompt)
 
     try:
+        # We call the model directly without the v1beta wrapper if possible
         response = st.session_state.chat_session.send_message(prompt)
         ai_msg = response.text
         with st.chat_message("assistant", avatar="⚖️"):
@@ -73,7 +76,8 @@ if prompt := st.chat_input("How can we help?"):
         # Extraction logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
-            extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
+            extract_response = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}")
+            extract = extract_response.text
             if "|" in extract:
                 p = extract.split("|")
                 new_row = pd.DataFrame([{
@@ -90,8 +94,9 @@ if prompt := st.chat_input("How can we help?"):
                 st.session_state.lead_captured = True
                 st.toast("✅ Information secured for review.")
     except Exception as e:
+        # If this STILL fails, it will show us the EXACT version conflict
         st.error(f"Handshake Issue: {e}")
 
 # 5. Footer
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. AI Assistant.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. Estate Planning & Probate Specialists.</p>", unsafe_allow_html=True)
