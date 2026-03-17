@@ -51,10 +51,11 @@ except Exception:
 # 4. API & Model Setup
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# THE FIX: Explicitly using the full path 'models/gemini-1.5-flash'
-# This is the address the 404 error is asking for.
+# THE FIX: Using 'gemini-1.5-flash' WITHOUT the 'models/' prefix
+# Some versions of the v1beta library automatically add the prefix, 
+# leading to a 404 if we add it manually.
 model = genai.GenerativeModel(
-    model_name="models/gemini-1.5-flash", 
+    model_name="gemini-1.5-flash", 
     system_instruction=(
         "You are a Professional Intake Assistant for Duffley Law PLLC. "
         "MANDATORY: You are an AI, not an attorney. You cannot give legal advice. "
