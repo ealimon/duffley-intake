@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Branding & UI Setup
+# 1. Branding & UI
 st.set_page_config(page_title="Duffley Law PLLC | Portal", page_icon="⚖️", layout="centered")
 
 st.markdown("""
@@ -30,12 +30,11 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Connection & Clara's Brain
+# 2. Clara's Brain (Dynamic Model Selection)
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # Using the Dynamic search that fixed our 404
     available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
     target_model = next((m for m in available_models if "flash" in m), available_models[0])
     
@@ -44,15 +43,15 @@ try:
         system_instruction=(
             "Your name is Clara. You are the Professional Intake Assistant for Duffley Law PLLC. "
             "MANDATORY: You must lead by identifying yourself as Clara and stating you are an AI assistant, not an attorney. "
-            "Tone: Compassionate, patient, and professional. "
-            "Goal: Collect Name, Texas County, Legal Need, and Contact info for the attorney to review."
+            "Tone: Compassionate and professional. "
+            "Goal: Collect Name, Texas County, Legal Need, and Contact info."
         )
     )
-except Exception as error_msg:
-    st.error(f"Initialization Error: {error_msg}")
+except Exception as e:
+    st.error(f"Initialization Error: {e}")
     st.stop()
 
-# 3. Chat Session & State
+# 3. Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.chat_session = model.start_chat(history=[])
@@ -64,12 +63,12 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
 
 if not st.session_state.messages:
-    welcome = "Welcome to Duffley Law PLLC. My name is Clara. I am an AI assistant, not an attorney, and this chat does not create an attorney-client relationship. How can I help you today?"
+    welcome = "Welcome to Duffley Law PLLC. My name is Clara. I am an AI assistant, not an attorney. How can I help you today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
-# 4. Interaction & GSheets Sync
+# 4. Interaction & FIXED Sync Logic
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
@@ -84,37 +83,35 @@ if prompt := st.chat_input("How can we help?"):
 
         # Extraction Logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
+        # Trigger sync if contact info is found and lead hasn't been captured yet
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
-            extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
+            extract_prompt = f"Return ONLY data separated by pipes: Name | Need | County | Contact | Summary. Context: {full_history}"
+            extract = model.generate_content(extract_prompt).text
+            
             if "|" in extract:
-                p = extract.split("|")
-                new_row = pd.DataFrame([{
-                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "Client Name": p[0].strip() if len(p) > 0 else "Unknown",
-                    "Inquiry Type": p[1].strip() if len(p) > 1 else "Unknown",
-                    "Texas County": p[2].strip() if len(p) > 2 else "Unknown",
-                    "Email/Phone": p[3].strip() if len(p) > 3 else "Unknown",
-                    "Summary": p[4].strip() if len(p) > 4 else "New Lead"
-                }])
-                existing = conn.read(worksheet="Sheet1")
-                updated = pd.concat([existing, new_row], ignore_index=True)
-                conn.update(worksheet="Sheet1", data=updated)
-                st.session_state.lead_captured = True
-                st.toast("✅ Information secured for attorney review.")
+                p = [item.strip() for item in extract.split("|")]
+                # Ensure we have enough parts
+                if len(p) >= 4:
+                    new_entry = {
+                        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "Client Name": p[0],
+                        "Inquiry Type": p[1],
+                        "Texas County": p[2],
+                        "Email/Phone": p[3],
+                        "Summary": p[4] if len(p) > 4 else "New Lead"
+                    }
+                    
+                    # Read existing data and append new row cleanly
+                    existing_df = conn.read(worksheet="Sheet1")
+                    updated_df = pd.concat([existing_df, pd.DataFrame([new_entry])], ignore_index=True)
+                    conn.update(worksheet="Sheet1", data=updated_df)
+                    
+                    st.session_state.lead_captured = True
+                    st.toast("✅ Lead information securely synced.")
+                    
     except Exception as e:
-        st.error(f"Connection Issue: {e}")
+        st.error(f"Sync Issue: {e}")
 
-# 5. Professional Footer
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; color: #718096; font-size: 0.85rem; padding: 20px;">
-        <p><strong>LEGAL DISCLAIMER</strong></p>
-        <p>This AI Assistant is for informational and intake purposes only. 
-        It does not constitute legal advice or form an attorney-client relationship.</p>
-        <p>© 2026 Duffley Law PLLC. All Rights Reserved.</p>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+# 5. Footer
+st.markdown("<br><br>---")
+st.markdown("<p style='text-align: center; color: #718096; font-size: 0.85rem;'>© 2026 Duffley Law PLLC. Clara AI Assistant.</p>", unsafe_allow_html=True)
