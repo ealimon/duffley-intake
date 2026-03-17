@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Page Configuration & Branding
+# 1. Branding & UI
 st.set_page_config(page_title="Duffley Law PLLC", page_icon="⚖️", layout="centered")
 
 st.markdown("""
@@ -23,39 +23,41 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Secure Connections
+# 2. Connection & Modern Model Configuration
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # RESOLUTION: Using the most stable model string for current API versions
+    # RESOLUTION: Using Gemini 2.0 Flash which is native to the v1beta API
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash", 
-        system_instruction="You are a professional intake assistant for Duffley Law PLLC. You are an AI, not an attorney. Collect Name, County, and Contact info. Do not give legal advice."
+        model_name="gemini-2.0-flash-exp", 
+        system_instruction=(
+            "You are a professional intake assistant for Duffley Law PLLC. "
+            "You are an AI, not an attorney. You cannot give legal advice. "
+            "Your goal is to compassionately collect Name, Texas County, and Contact info."
+        )
     )
 except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# 3. Chat State Management
+# 3. State Management
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.chat_session = model.start_chat(history=[])
     st.session_state.lead_captured = False
 
-# Display Chat History
 for m in st.session_state.messages:
     with st.chat_message(m["role"], avatar="⚖️" if m["role"] == "assistant" else "👤"):
         st.markdown(m["content"])
 
-# Initial Welcome
 if not st.session_state.messages:
-    welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you protect your family's legacy today?"
+    welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
-# 4. User Interaction & Data Sync
+# 4. Interaction & Data Sync
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
@@ -68,7 +70,7 @@ if prompt := st.chat_input("How can we help?"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Syncing Logic (Fires when contact info is provided)
+        # Extraction logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
             extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
@@ -86,10 +88,11 @@ if prompt := st.chat_input("How can we help?"):
                 updated = pd.concat([existing, new_row], ignore_index=True)
                 conn.update(worksheet="Sheet1", data=updated)
                 st.session_state.lead_captured = True
-                st.toast("✅ Lead information secured.")
+                st.toast("✅ Lead secured for review.")
     except Exception as e:
-        st.error(f"Connection Issue: {e}")
+        # Final Debug line
+        st.error(f"Handshake Issue: {e}")
 
-# 5. Permanent Footer
+# 5. Footer
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. AI Assistant (Non-Attorney).</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. AI Intake Assistant.</p>", unsafe_allow_html=True)
