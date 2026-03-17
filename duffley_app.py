@@ -11,14 +11,14 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom CSS for the "Duffley Blue" Aesthetic & Professional Layout
+# Custom CSS for the "Duffley Blue" Aesthetic
 st.markdown("""
     <style>
         #MainMenu, footer, header {visibility: hidden;}
         div[data-testid="stToolbar"] {display: none;}
         .stApp {background-color: #ffffff;}
         
-        /* Corporate Font Styling (Serif for Trust) */
+        /* Corporate Font Styling (Serif) */
         html, body, [class*="css"] {
             font-family: 'Georgia', serif; 
         }
@@ -37,7 +37,6 @@ st.markdown("""
             border-radius: 10px;
         }
 
-        /* Header Layout */
         .header-box {
             text-align: center;
             border-bottom: 2px solid #1A365D;
@@ -50,13 +49,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Professional SVG Header (Shield & Pillars)
+# 2. Professional Header
 st.markdown("""
     <div class="header-box">
-        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1Z" fill="#1A365D"/>
-            <path d="M9 14H10V10H9V14ZM14 14H15V10H14V14ZM11.5 14H12.5V10H11.5V14ZM8 16H16V15H8V16ZM8 9H16V8H8V9Z" fill="white"/>
-        </svg>
         <h1 style="color: #1A365D; letter-spacing: 2px; margin-bottom: 0px; font-size: 1.8rem;">DUFFLEY LAW PLLC</h1>
         <p style="color: #718096; font-style: italic; margin-top: 5px;">Estate Planning & Probate Specialists</p>
     </div>
@@ -72,10 +67,10 @@ except Exception:
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 model = genai.GenerativeModel(
-    model_name="gemini-3.1-flash-lite-preview",
+    model_name="gemini-1.5-flash",
     system_instruction=(
         "You are the Professional Intake Assistant for Duffley Law PLLC. "
-        "Your tone is compassionate, patient, and highly professional. "
+        "Tone: Compassionate, patient, and precise. "
         "MANDATORY OPENING: You must state in your very first message: 'I am an AI assistant, not an attorney. Our conversation does not create an attorney-client relationship.' "
         "PROCESS: 1. Greet with kindness. 2. Collect Full Name and Texas County. "
         "3. Identify the legal need (Will, Trust, or Probate). "
@@ -105,4 +100,58 @@ if not st.session_state.messages:
 # 5. Intake & Data Sync
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("
+    with st.chat_message("user", avatar="👤"):
+        st.markdown(prompt)
+
+    try:
+        response = st.session_state.chat_session.send_message(prompt)
+        ai_msg = response.text
+        
+        with st.chat_message("assistant", avatar="⚖️"):
+            st.markdown(ai_msg)
+        st.session_state.messages.append({"role": "assistant", "content": ai_msg})
+
+        # Sync Logic
+        full_history = " ".join([m["content"] for m in st.session_state.messages])
+        
+        if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
+            extract_prompt = f"Extract as pipes: Name | Inquiry Type | County | Contact | Summary from: {full_history}"
+            extract = model.generate_content(extract_prompt).text
+            
+            if "|" in extract:
+                try:
+                    p = extract.split("|")
+                    new_row = pd.DataFrame([{
+                        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "Client Name": p[0].strip() if len(p) > 0 else "Unknown",
+                        "Inquiry Type": p[1].strip() if len(p) > 1 else "Needs review",
+                        "Texas County": p[2].strip() if len(p) > 2 else "Check chat",
+                        "Email/Phone": p[3].strip() if len(p) > 3 else "Check chat",
+                        "Summary": p[4].strip() if len(p) > 4 else "Legal Lead"
+                    }])
+                    
+                    existing = conn.read(worksheet="Sheet1")
+                    updated = pd.concat([existing, new_row], ignore_index=True)
+                    conn.update(worksheet="Sheet1", data=updated)
+                    
+                    st.session_state.lead_captured = True
+                    st.toast("✅ Information secured for review.")
+                except:
+                    pass
+    except:
+        st.error("System temporarily busy. Please try again.")
+
+# 6. Legal Footer
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("---")
+st.markdown(
+    """
+    <div style="text-align: center; color: #718096; font-size: 0.8rem; padding: 10px;">
+        <p><strong>LEGAL DISCLAIMER</strong></p>
+        <p>This AI Assistant is for informational purposes only and does not constitute legal advice or the 
+        formation of an attorney-client relationship.</p>
+        <p>© 2026 Duffley Law PLLC. All Rights Reserved.</p>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
