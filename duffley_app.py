@@ -4,13 +4,14 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. UI Branding & Professional Legal Styling
+# 1. UI Branding - Duffley Law PLLC Corporate Identity
 st.set_page_config(
     page_title="Duffley Law PLLC | Client Portal",
     page_icon="⚖️",
     layout="centered"
 )
 
+# Custom CSS for the "Duffley Blue" Aesthetic
 st.markdown("""
     <style>
         #MainMenu, footer, header {visibility: hidden;}
@@ -47,12 +48,13 @@ except Exception:
     st.error("Sheet Connection Error.")
     st.stop()
 
+# 4. API & Model Setup
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# THE FIX: Using the absolute most stable model alias and removing safety blocks
-# We use 'gemini-1.5-flash-latest' to ensure it's compatible with the v1beta API
+# THE FIX: Explicitly using the full path 'models/gemini-1.5-flash'
+# This is the address the 404 error is asking for.
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash-latest", 
+    model_name="models/gemini-1.5-flash", 
     system_instruction=(
         "You are a Professional Intake Assistant for Duffley Law PLLC. "
         "MANDATORY: You are an AI, not an attorney. You cannot give legal advice. "
@@ -66,7 +68,7 @@ model = genai.GenerativeModel(
     }
 )
 
-# 4. State Management
+# 5. State Management
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.chat_session = model.start_chat(history=[])
@@ -85,7 +87,7 @@ if not st.session_state.messages:
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
-# 5. Chat & Sync
+# 6. Chat & Sync
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
@@ -118,8 +120,9 @@ if prompt := st.chat_input("How can we help?"):
                 st.session_state.lead_captured = True
                 st.toast("✅ Lead secured.")
     except Exception as e:
-        st.error(f"System busy. Please try again. Error: {e}")
+        # This will now show the SPECIFIC error if it fails again
+        st.error(f"System busy. Details: {e}")
 
-# 6. Legal Footer
+# 7. Legal Footer
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. This AI does not provide legal advice.</p>", unsafe_allow_html=True)
