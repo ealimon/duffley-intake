@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Branding & UI
+# 1. Corporate Branding
 st.set_page_config(page_title="Duffley Law PLLC", page_icon="⚖️", layout="centered")
 
 st.markdown("""
@@ -23,24 +23,26 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Connection & STABLE Model Config
+# 2. Dynamic Model Selection (The "Bypass" Logic)
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # THE FIX: We are removing the 'models/' prefix entirely and using the STABLE alias
-    # This bypasses the v1beta pathing issues
+    # We dynamically find a working model instead of hardcoding a name
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    # Filter for flash models specifically
+    target_model = next((m for m in available_models if "flash" in m), available_models[0])
+    
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash", 
-        generation_config={"temperature": 0.7, "top_p": 0.95, "max_output_tokens": 1024},
+        model_name=target_model,
         system_instruction=(
             "You are a professional intake assistant for Duffley Law PLLC. "
-            "STRICT RULE: You are an AI assistant, not an attorney. You cannot give legal advice. "
-            "Your goal is to compassionately collect: Name, Texas County, and Contact info."
+            "You are an AI, not an attorney. Do not give legal advice. "
+            "Collect: Name, Texas County, and Contact info."
         )
     )
 except Exception as e:
-    st.error(f"Setup Error: {e}")
+    st.error(f"System Initialization Error: {e}")
     st.stop()
 
 # 3. State Management
@@ -54,49 +56,45 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
 
 if not st.session_state.messages:
-    welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you today?"
+    welcome = "Welcome to Duffley Law. I am an AI assistant, not an attorney. How can we help you today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
     with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
-# 4. Interaction & Data Sync
+# 4. Interaction
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
     try:
-        # We call the model directly without the v1beta wrapper if possible
         response = st.session_state.chat_session.send_message(prompt)
         ai_msg = response.text
         with st.chat_message("assistant", avatar="⚖️"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Extraction logic
+        # Capture logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
-            extract_response = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}")
-            extract = extract_response.text
+            extract = model.generate_content(f"Extract: Name|Need|County|Contact|Summary from: {full_history}").text
             if "|" in extract:
                 p = extract.split("|")
                 new_row = pd.DataFrame([{
                     "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "Client Name": p[0].strip() if len(p) > 0 else "Unknown",
-                    "Inquiry Type": p[1].strip() if len(p) > 1 else "Unknown",
-                    "Texas County": p[2].strip() if len(p) > 2 else "Unknown",
-                    "Email/Phone": p[3].strip() if len(p) > 3 else "Unknown",
+                    "Client Name": p[0].strip() if len(p) > 0 else "N/A",
+                    "Inquiry Type": p[1].strip() if len(p) > 1 else "N/A",
+                    "Texas County": p[2].strip() if len(p) > 2 else "N/A",
+                    "Email/Phone": p[3].strip() if len(p) > 3 else "N/A",
                     "Summary": p[4].strip() if len(p) > 4 else "New Lead"
                 }])
                 existing = conn.read(worksheet="Sheet1")
                 updated = pd.concat([existing, new_row], ignore_index=True)
                 conn.update(worksheet="Sheet1", data=updated)
                 st.session_state.lead_captured = True
-                st.toast("✅ Information secured for review.")
+                st.toast("✅ Information secured.")
     except Exception as e:
-        # If this STILL fails, it will show us the EXACT version conflict
-        st.error(f"Handshake Issue: {e}")
+        st.error(f"Connection Error: {e}")
 
-# 5. Footer
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. Estate Planning & Probate Specialists.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 0.8rem;'>© 2026 Duffley Law PLLC.</p>", unsafe_allow_html=True)
