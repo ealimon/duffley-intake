@@ -1,0 +1,16 @@
+# Streamlit secrets (CRITICAL)
+.streamlit/config.toml
+.streamlit/secrets.toml
+
+# Python virtual environments
+venv/
+env/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Mac/Windows system files
+.DS_Store
+Thumbs.db
