@@ -79,28 +79,32 @@ if prompt := st.chat_input("How can we help?"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Extraction Logic - Strictly Data Only
+        # FIXED Extraction Logic - Prevents Overwriting
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
-            # We explicitly tell the AI NOT to include headers in its output
-            extract_prompt = "Return ONLY data separated by pipes. Do NOT include any headers or labels. Format: Name | Need | County | Contact | Summary. Context: " + full_history
+            extract_prompt = "Return ONLY data separated by pipes (|). No headers. Format: Name | Need | County | Contact | Summary. Context: " + full_history
             extract = model.generate_content(extract_prompt).text
             
             if "|" in extract:
                 p = [item.strip() for item in extract.split("|")]
                 if len(p) >= 4:
-                    new_entry = pd.DataFrame([{
+                    new_entry = {
                         "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "Client Name": p[0],
                         "Inquiry Type": p[1],
                         "Texas County": p[2],
                         "Email/Phone": p[3],
                         "Summary": p[4] if len(p) > 4 else "New Lead"
-                    }])
+                    }
                     
-                    # Read existing data and append without creating new columns/headers
-                    existing_df = conn.read(worksheet="Sheet1")
-                    updated_df = pd.concat([existing_df, new_entry], ignore_index=True)
+                    # FETCH FRESH DATA: This prevents the 'overwrite' by ensuring we see the current sheet state
+                    existing_df = conn.read(worksheet="Sheet1", ttl=0) 
+                    
+                    # Convert new entry to a DataFrame and append
+                    new_df = pd.DataFrame([new_entry])
+                    updated_df = pd.concat([existing_df, new_df], ignore_index=True)
+                    
+                    # Write the full updated set back to the sheet
                     conn.update(worksheet="Sheet1", data=updated_df)
                     
                     st.session_state.lead_captured = True
