@@ -20,13 +20,13 @@ st.markdown("""
         
         /* Corporate Font Styling */
         html, body, [class*="css"] {
-            font-family: 'Georgia', serif; /* More traditional, legal feel */
+            font-family: 'Georgia', serif; 
         }
 
         /* Chat Bubble Styling */
         [data-testid="stChatMessageAssistant"] {
             background-color: #F8F9FA;
-            color: #1A365D; /* Duffley Navy */
+            color: #1A365D;
             border-left: 5px solid #1A365D;
             border-radius: 0px 10px 10px 0px;
         }
@@ -49,7 +49,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Professional Header (No images needed)
+# 2. Professional Header
 st.markdown("""
     <div class="header-container">
         <h1 style="color: #1A365D; letter-spacing: 2px; margin-bottom: 0px;">DUFFLEY LAW PLLC</h1>
@@ -66,50 +66,48 @@ except Exception:
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# System Instruction infused with Duffley Law's core values
 model = genai.GenerativeModel(
     model_name="gemini-3.1-flash-lite-preview",
     system_instruction=(
         "You are the Professional Intake Assistant for Duffley Law PLLC. "
-        "Tone: Compassionate, patient, and precise. Avoid legal jargon. "
-        "Core Value: 'It is better to be slow and accurate than fast and wrong.' "
+        "Tone: Compassionate, patient, and precise. "
         "MANDATORY OPENING: 'I am an AI assistant, not an attorney. Our conversation does not create an attorney-client relationship.' "
         "PROCESS: 1. Greet with kindness. 2. Collect Full Name and Texas County. "
-        "3. Ask about the specific legal need (Will, Trust, or Probate). "
-        "4. Ask about family/assets (to identify if they need probate avoidance). "
-        "5. Secure contact info (Email/Phone)."
+        "3. Identify legal need (Will, Trust, or Probate). "
+        "4. Ask about family/assets. 5. Secure Email or Phone."
     )
 )
 
-# 4. State Management
+# 4. Session State Management
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.chat_session = model.start_chat(history=[])
     st.session_state.lead_captured = False
 
-# Display Chat
+# Display Chat History with Scale Avatar
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
+    avatar_icon = "⚖️" if m["role"] == "assistant" else "👤"
+    with st.chat_message(m["role"], avatar=avatar_icon):
         st.markdown(m["content"])
 
 # Initial Welcome
 if not st.session_state.messages:
     welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you protect your family's legacy today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="⚖️"):
         st.markdown(welcome)
 
 # 5. Intake & Data Sync
 if prompt := st.chat_input("How can we help?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
     try:
         response = st.session_state.chat_session.send_message(prompt)
         ai_msg = response.text
         
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="⚖️"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
