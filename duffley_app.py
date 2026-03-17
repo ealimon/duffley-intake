@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Branding & UI (The "Duffley" Navy & White)
+# 1. Branding & UI
 st.set_page_config(page_title="Duffley Law PLLC", page_icon="⚖️", layout="centered")
 
 st.markdown("""
@@ -23,19 +23,18 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Connection & Direct Model Configuration
+# 2. Connection & Stable Model Config
 try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # THE RESOLUTION: Using the most widely accepted standard alias
+    # RESOLUTION: Using the 'flash-lite' model which avoids the 404 naming conflict
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash", 
+        model_name="gemini-1.5-flash-lite", 
         system_instruction=(
             "You are a professional intake assistant for Duffley Law PLLC. "
-            "STRICT RULE: You are an AI, not an attorney. You cannot give legal advice. "
-            "If asked for legal advice, explain that you are an AI assistant and only an attorney "
-            "can answer that. Your goal is to collect: Name, Texas County, and Contact info."
+            "STRICT RULE: You are an AI assistant, not an attorney. You cannot give legal advice. "
+            "Your goal is to compassionately collect: Name, Texas County, and Contact info."
         )
     )
 except Exception as e:
@@ -48,12 +47,10 @@ if "messages" not in st.session_state:
     st.session_state.chat_session = model.start_chat(history=[])
     st.session_state.lead_captured = False
 
-# Display Chat History
 for m in st.session_state.messages:
     with st.chat_message(m["role"], avatar="⚖️" if m["role"] == "assistant" else "👤"):
         st.markdown(m["content"])
 
-# Initial Welcome
 if not st.session_state.messages:
     welcome = "Welcome to Duffley Law PLLC. I am an AI assistant, not an attorney, and this conversation does not create an attorney-client relationship. How can we help you protect your family's legacy today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
@@ -67,18 +64,15 @@ if prompt := st.chat_input("How can we help?"):
         st.markdown(prompt)
 
     try:
-        # Use simple generation to bypass 'Handshake' errors
         response = st.session_state.chat_session.send_message(prompt)
         ai_msg = response.text
-        
         with st.chat_message("assistant", avatar="⚖️"):
             st.markdown(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
 
-        # Data Extraction logic
+        # Extraction logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
-            # We use a separate generation for extraction to keep the chat stable
             extract = model.generate_content(f"Extract as pipes: Name | Need | County | Contact | Summary from: {full_history}").text
             if "|" in extract:
                 p = extract.split("|")
@@ -96,9 +90,8 @@ if prompt := st.chat_input("How can we help?"):
                 st.session_state.lead_captured = True
                 st.toast("✅ Information secured for review.")
     except Exception as e:
-        # Final connection check
-        st.error(f"Final Connection Check: {e}")
+        st.error(f"Handshake Issue: {e}")
 
 # 5. Footer
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: #718096; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. Estate Planning & Probate Specialists.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: grey; font-size: 0.8rem;'>© 2026 Duffley Law PLLC. AI Assistant.</p>", unsafe_allow_html=True)
