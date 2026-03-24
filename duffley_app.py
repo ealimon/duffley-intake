@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Page Configuration
+# 1. Page Configuration & UI
 st.set_page_config(page_title="Duffley Law PLLC | Portal", page_icon="⚖️", layout="centered")
 
 st.markdown("""
@@ -34,10 +34,11 @@ try:
     conn = st.connection("gsheets", type=GSheetsConnection, ttl=0)
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
+    # Dynamic search to prevent 404 errors
     available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
     target_model = next((m for m in available_models if "flash" in m), available_models[0])
     
-    # SAFETY FIX: Explicitly setting blocks to NONE for legal intake context
+    # SAFETY FIX: This stops the 'finish_reason 1' block for legal terms
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -51,8 +52,9 @@ try:
         system_instruction=(
             "Your name is Clara. You are the Professional Intake Assistant for Duffley Law PLLC. "
             "Identify as Clara and state you are an AI assistant, not an attorney. "
-            "If a user is outside of Texas, explain the firm primarily handles Texas law "
-            "but collect their info anyway for review. Collect: Name, County, Need, and Contact."
+            "IMPORTANT: If a user is outside of Texas, explain the firm handles Texas law "
+            "but collect their info anyway for the attorney to review. "
+            "Goal: Collect Name, County, Legal Need, and Contact info."
         )
     )
 except Exception as e:
@@ -65,11 +67,13 @@ if "messages" not in st.session_state:
     st.session_state.chat_session = model.start_chat(history=[])
     st.session_state.lead_captured = False
 
+# Display history
 for m in st.session_state.messages:
     avatar_choice = "⚖️" if m["role"] == "assistant" else "👤"
     with st.chat_message(m["role"], avatar=avatar_choice):
         st.markdown(m["content"])
 
+# Initial Greeting
 if not st.session_state.messages:
     welcome = "Welcome to Duffley Law PLLC. My name is Clara. I am an AI assistant, not an attorney. How can I help you today?"
     st.session_state.messages.append({"role": "assistant", "content": welcome})
@@ -85,18 +89,18 @@ if prompt := st.chat_input("How can we help?"):
     try:
         response = st.session_state.chat_session.send_message(prompt)
         
-        # VALIDATION CHECK: Ensure response wasn't blocked by safety filters
+        # VALIDATION CHECK: Ensure response wasn't blocked mid-sentence
         if response.candidates and len(response.candidates[0].content.parts) > 0:
             ai_msg = response.text
             with st.chat_message("assistant", avatar="⚖️"):
                 st.markdown(ai_msg)
             st.session_state.messages.append({"role": "assistant", "content": ai_msg})
         else:
-            error_fallback = "I apologize, but I am unable to process that specific request due to safety filters. Please try rephrasing your legal inquiry."
-            st.warning(error_fallback)
-            st.session_state.messages.append({"role": "assistant", "content": error_fallback})
+            error_msg = "I apologize, but I am unable to process that specific request. How else can I help?"
+            st.warning(error_msg)
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-        # Extraction Logic
+        # Smart Extraction Logic
         full_history = " ".join([m["content"] for m in st.session_state.messages])
         if ("@" in full_history or any(char.isdigit() for char in full_history)) and not st.session_state.lead_captured:
             extract_prompt = "Return ONLY data separated by pipes (|). No headers. Format: Name | Need | County | Contact | Summary. Context: " + full_history
@@ -113,15 +117,25 @@ if prompt := st.chat_input("How can we help?"):
                             "Texas County": p[2], "Email/Phone": p[3],
                             "Summary": p[4] if len(p) > 4 else "New Lead"
                         }])
+                        # ttl=0 ensures we don't 'overwrite' due to cache issues
                         existing_df = conn.read(worksheet="Sheet1", ttl=0)
                         updated_df = pd.concat([existing_df, new_entry], ignore_index=True)
                         conn.update(worksheet="Sheet1", data=updated_df)
                         st.session_state.lead_captured = True
-                        st.toast("✅ Lead secured.")
+                        st.toast("✅ Information secured for review.")
                         
     except Exception as e:
         st.error(f"Sync Issue: {e}")
 
-# 5. Footer
+# 5. Professional Footer
 st.write("---")
-st.markdown("<div style='text-align: center; color: #718096; font-size: 0.85rem;'><p>© 2026 Duffley Law PLLC. Clara AI Assistant.</p></div>", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style="text-align: center; color: #718096; font-size: 0.85rem;">
+        <p><strong>LEGAL DISCLAIMER</strong><br>
+        This AI Assistant is for informational purposes only and does not create an attorney-client relationship.<br>
+        © 2026 Duffley Law PLLC. Clara AI Assistant.</p>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
